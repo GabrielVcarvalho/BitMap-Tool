@@ -14,7 +14,9 @@ typedef struct
 
 int isBmp (BYTE firstByte, BYTE secondByte);
 int analyseFileHeader(FILE* bmpFile, int* bmpFileSize, int* bmpOffSetPosition);
-int analyseInfoHeader(FILE* bmpFile, int* bmpImageHeight, int* bmpImageWidth, int* bitsByPixel, int* compression, int* bmpImageSize);
+int analyseInfoHeader(FILE* bmpFile, int* bmpImageHeight, int* bmpImageWidth, short* bitsByPixel, int* compression, int* bmpImageSize);
+int transformGrayScale(FILE* bmpFile ,int bmpOffSetPosition, int bitsPerPixel, int height, int width);
+int copyHeader(FILE* referenceBmp, FILE* outPutBmp, int bmpOffSetPosition);
 short constructShort(BYTE* startByte);
 int constructInt(BYTE* startByte);
 
@@ -34,15 +36,36 @@ int main(int argc, char *argv[])
     if(analyseInfoHeader(bmpFile, &imageBmpHeight, &imageBmpWidth, &bitsPerPixel, &compression, &bmpSizeImage) != 0)
         return 1;
 
+    if(compression != 0)
+    {
+        printf("Have not suport to compressed file\n");
+        fclose(bmpFile);
+        return 1;
+    }
+
+    if(bitsPerPixel != 24)
+    {
+        printf("Images with less or more than three bytes per pixel are not supported\n");
+        fclose(bmpFile);
+        return 1;
+    }
+
+    if(bmpOffSetPosition < 54)
+    {
+        printf("Images with compressed header are not supported\n");
+        fclose(bmpFile);
+        return 1;
+    }
+
+    transformGrayScale(bmpFile, bmpOffSetPosition, bitsPerPixel, imageBmpHeight, imageBmpWidth);
+
     fclose(bmpFile);
+    printf("Sucess to read and copy image\n");
     return 0;
 }
 
 int transformGrayScale(FILE* bmpFile ,int bmpOffSetPosition, int bitsPerPixel, int height, int width)
 {
-    BYTE allHeader[bmpOffSetPosition];
-    fseek(bmpFile, 0, SEEK_SET);
-    fread(allHeader, bmpOffSetPosition, 1, bmpFile);
     FILE* bmpGrayScale = fopen("imagemGray.bmp", "wb");
     int bytesPerRow;
     int padding;
@@ -50,10 +73,8 @@ int transformGrayScale(FILE* bmpFile ,int bmpOffSetPosition, int bitsPerPixel, i
     bytesPerRow = width * (bitsPerPixel / 8); 
     padding = (4 - (bytesPerRow % 4)) % 4;
 
-    if(bmpGrayScale == NULL)
+    if(copyHeader(bmpFile, bmpGrayScale, bmpOffSetPosition) != 0)
         return 1;
-
-    fwrite(allHeader, bmpOffSetPosition, 1, bmpGrayScale);
     
     for (int line = 0; line < height; line++)
     {
@@ -82,6 +103,20 @@ int transformGrayScale(FILE* bmpFile ,int bmpOffSetPosition, int bitsPerPixel, i
     return 0;
 }
 
+int copyHeader(FILE* referenceBmp, FILE* outPutBmp, int bmpOffSetPosition)
+{
+    BYTE allHeader[bmpOffSetPosition];
+    fseek(referenceBmp, 0, SEEK_SET);
+    fread(allHeader, bmpOffSetPosition, 1, referenceBmp);
+
+    if(outPutBmp == NULL)
+        return 1;
+
+    fwrite(allHeader, bmpOffSetPosition, 1, outPutBmp);
+
+    return 0;
+}
+
 int analyseFileHeader(FILE* bmpFile, int* bmpFileSize, int* bmpOffSetPosition)
 {
     BYTE fileHeader[FILEHEADERSIZE];
@@ -107,7 +142,7 @@ int analyseFileHeader(FILE* bmpFile, int* bmpFileSize, int* bmpOffSetPosition)
     return 0;
 }
 
-int analyseInfoHeader(FILE* bmpFile, int* bmpImageHeight, int* bmpImageWidth, int* bitsPerPixel, int* compression, int* bmpImageSize)
+int analyseInfoHeader(FILE* bmpFile, int* bmpImageHeight, int* bmpImageWidth, short* bitsPerPixel, int* compression, int* bmpImageSize)
 {
     BYTE infoHeader[INFOHEADERSIZE];
     
@@ -139,7 +174,7 @@ int constructInt(BYTE* startByte)
 
     for(int i = 0; i < bytesInOneInt; i++)
     {
-        finalInt |= (*(startByte + i) << (byteSize * i));
+        finalInt |= (((unsigned int) *(startByte + i)) << (byteSize * i));
     }
     
     return finalInt;
@@ -147,7 +182,7 @@ int constructInt(BYTE* startByte)
 
 short constructShort(BYTE* startByte)
 {
-    return startByte[0] | ((unsigned int)startByte[1] << 8);
+    return startByte[0] | ((unsigned short)startByte[1] << 8);
 }
 
 int isBmp (BYTE firstByte, BYTE secondByte)
