@@ -2,6 +2,13 @@
 #include <stdlib.h>
 
 typedef unsigned char BYTE;
+typedef struct
+{
+    BYTE blue;
+    BYTE green;
+    BYTE red;
+} PIXEL;
+
 #define FILEHEADERSIZE 14
 #define INFOHEADERSIZE 40
 
@@ -17,17 +24,61 @@ int main(int argc, char *argv[])
     int bmpFileSize;
     int bmpOffSetPosition;
     int imageBmpHeight, imageBmpWidth;
-    short bitsByPixel;
+    short bitsPerPixel;
     int compression;
     int bmpSizeImage;
 
     if(analyseFileHeader(bmpFile, &bmpFileSize, &bmpOffSetPosition) != 0)
         return 1;
 
-    if(analyseInfoHeader(bmpFile, &imageBmpHeight, &imageBmpWidth, &bitsByPixel, &compression, &bmpSizeImage) != 0)
+    if(analyseInfoHeader(bmpFile, &imageBmpHeight, &imageBmpWidth, &bitsPerPixel, &compression, &bmpSizeImage) != 0)
         return 1;
 
     fclose(bmpFile);
+    return 0;
+}
+
+int transformGrayScale(FILE* bmpFile ,int bmpOffSetPosition, int bitsPerPixel, int height, int width)
+{
+    BYTE allHeader[bmpOffSetPosition];
+    fseek(bmpFile, 0, SEEK_SET);
+    fread(allHeader, bmpOffSetPosition, 1, bmpFile);
+    FILE* bmpGrayScale = fopen("imagemGray.bmp", "wb");
+    int bytesPerRow;
+    int padding;
+
+    bytesPerRow = width * (bitsPerPixel / 8); 
+    padding = (4 - (bytesPerRow % 4)) % 4;
+
+    if(bmpGrayScale == NULL)
+        return 1;
+
+    fwrite(allHeader, bmpOffSetPosition, 1, bmpGrayScale);
+    
+    for (int line = 0; line < height; line++)
+    {
+        PIXEL imageLineArray[width];
+
+        fread(imageLineArray, bytesPerRow, 1, bmpFile);
+
+        for(int i = 0; i < width; i++)
+        {
+            PIXEL pixel = imageLineArray[i];
+            int gray = (pixel.red + pixel.green + pixel.blue) / 3;
+            
+            imageLineArray[i].blue = gray;
+            imageLineArray[i].green = gray;
+            imageLineArray[i].red = gray;
+        }
+
+        fwrite(imageLineArray, bytesPerRow, 1, bmpGrayScale);
+
+        for(int i = 0; i < padding; i++)
+            fputc(0, bmpGrayScale);
+
+        fseek(bmpFile, padding, SEEK_CUR);
+    }
+    fclose(bmpGrayScale);
     return 0;
 }
 
@@ -56,7 +107,7 @@ int analyseFileHeader(FILE* bmpFile, int* bmpFileSize, int* bmpOffSetPosition)
     return 0;
 }
 
-int analyseInfoHeader(FILE* bmpFile, int* bmpImageHeight, int* bmpImageWidth, int* bitsByPixel, int* compression, int* bmpImageSize)
+int analyseInfoHeader(FILE* bmpFile, int* bmpImageHeight, int* bmpImageWidth, int* bitsPerPixel, int* compression, int* bmpImageSize)
 {
     BYTE infoHeader[INFOHEADERSIZE];
     
@@ -73,7 +124,7 @@ int analyseInfoHeader(FILE* bmpFile, int* bmpImageHeight, int* bmpImageWidth, in
     *bmpImageWidth = constructInt(&infoHeader[4]);
     *bmpImageHeight = constructInt(&infoHeader[8]);
     
-    *bitsByPixel = constructShort(&infoHeader[14]);
+    *bitsPerPixel = constructShort(&infoHeader[14]);
     *compression = constructInt(&infoHeader[16]);
     *bmpImageSize = constructInt(&infoHeader[20]);
     
