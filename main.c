@@ -1,5 +1,6 @@
 #include <stdio.h>
 #include <stdlib.h>
+#include <string.h>
 
 typedef unsigned char BYTE;
 typedef struct
@@ -22,13 +23,22 @@ int constructInt(BYTE* startByte);
 
 int main(int argc, char *argv[])
 {
-    FILE *bmpFile = fopen("imagem.bmp", "rb");
+
+    FILE *bmpFile;
     int bmpFileSize;
     int bmpOffSetPosition;
     int imageBmpHeight, imageBmpWidth;
     short bitsPerPixel;
     int compression;
     int bmpSizeImage;
+
+    if (argc < 3)
+    {
+        printf("The program structure is: <./program_name> <image.bmp> <filter>");
+        return 1;
+    }
+
+    bmpFile = fopen(argv[1], "rb");
 
     if(analyseFileHeader(bmpFile, &bmpFileSize, &bmpOffSetPosition) != 0)
         return 1;
@@ -57,10 +67,13 @@ int main(int argc, char *argv[])
         return 1;
     }
 
-    transformGrayScale(bmpFile, bmpOffSetPosition, bitsPerPixel, imageBmpHeight, imageBmpWidth);
+    if(strcmp(argv[2], "grayScale") == 0)
+    {
+        transformGrayScale(bmpFile, bmpOffSetPosition, bitsPerPixel, imageBmpHeight, imageBmpWidth);
+        printf("Sucess to read and copy image\n");
+    }
 
     fclose(bmpFile);
-    printf("Sucess to read and copy image\n");
     return 0;
 }
 
