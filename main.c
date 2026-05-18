@@ -17,6 +17,7 @@ int isBmp (BYTE firstByte, BYTE secondByte);
 int analyseFileHeader(FILE* bmpFile, int* bmpFileSize, int* bmpOffSetPosition);
 int analyseInfoHeader(FILE* bmpFile, int* bmpImageHeight, int* bmpImageWidth, short* bitsByPixel, int* compression, int* bmpImageSize);
 int transformGrayScale(FILE* bmpFile ,int bmpOffSetPosition, int bitsPerPixel, int height, int width);
+int horizontalFlip(FILE* bmpFile, int bmpOffSetPosition, int bitsPerPixel, int height, int width);
 int copyHeader(FILE* referenceBmp, FILE* outPutBmp, int bmpOffSetPosition);
 short constructShort(BYTE* startByte);
 int constructInt(BYTE* startByte);
@@ -69,8 +70,31 @@ int main(int argc, char *argv[])
 
     if(strcmp(argv[2], "grayScale") == 0)
     {
-        transformGrayScale(bmpFile, bmpOffSetPosition, bitsPerPixel, imageBmpHeight, imageBmpWidth);
-        printf("Sucess to read and copy image\n");
+        transformGrayScale(
+            bmpFile,
+            bmpOffSetPosition,
+            bitsPerPixel,
+            imageBmpHeight,
+            imageBmpWidth
+        );
+            
+            printf("Sucess to read and copy image\n");
+    }
+    else if(strcmp(argv[2], "horizontalFlip") == 0)
+    {
+        horizontalFlip(
+        bmpFile,
+        bmpOffSetPosition,
+        bitsPerPixel,
+        imageBmpHeight,
+        imageBmpWidth
+    );
+
+    printf("Sucess to horizontal flip image\n");
+    }
+    else
+    {
+        printf("Filter not found\n");
     }
 
     fclose(bmpFile);
@@ -113,6 +137,54 @@ int transformGrayScale(FILE* bmpFile ,int bmpOffSetPosition, int bitsPerPixel, i
         fseek(bmpFile, padding, SEEK_CUR);
     }
     fclose(bmpGrayScale);
+    return 0;
+}
+
+int horizontalFlip(FILE* bmpFile, int bmpOffSetPosition, int bitsPerPixel, int height, int width)
+{
+    FILE* bmpHorizontalFlip = fopen("HorizontalFlipImage.bmp", "wb");
+
+    int bytesPerRow;
+    int padding;
+
+    bytesPerRow = width * (bitsPerPixel / 8);
+
+    padding = (4 - (bytesPerRow % 4)) % 4;
+
+    if(copyHeader(bmpFile, bmpHorizontalFlip, bmpOffSetPosition) != 0)
+        return 1;
+
+    PIXEL bmpRowArray[width];
+
+    int leftPixelPos;
+    int rightPixelPos;
+
+    for(int y = 0; y < height; y++)
+    {
+        fread(bmpRowArray, bytesPerRow, 1, bmpFile);
+
+        for(int x = 0; x < width / 2; x++)
+        {
+            leftPixelPos = x;
+            rightPixelPos = width - 1 - x;
+
+            PIXEL tempPixel = bmpRowArray[leftPixelPos];
+
+            bmpRowArray[leftPixelPos] = bmpRowArray[rightPixelPos];
+
+            bmpRowArray[rightPixelPos] = tempPixel;
+        }
+
+        fwrite(bmpRowArray, bytesPerRow, 1, bmpHorizontalFlip);
+
+        for(int i = 0; i < padding; i++)
+            fputc(0, bmpHorizontalFlip);
+
+        fseek(bmpFile, padding, SEEK_CUR);
+    }
+
+    fclose(bmpHorizontalFlip);
+
     return 0;
 }
 
