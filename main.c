@@ -23,9 +23,11 @@ int isSupportedBmpFile(FILE* bmpFile, int* bmpFileSize, int* bmpOffSetPosition,
 //Filters
 int transformGrayScale(FILE* bmpFile ,int bmpOffSetPosition, int bitsPerPixel, int height, int width, int bytesPerRow, int padding);
 int horizontalFlip(FILE* bmpFile, int bmpOffSetPosition, int bitsPerPixel, int height, int width, int bytesPerRow, int padding);
+int rotate180degrees(FILE* bmpFile, int bmpOffSetPosition, int bitsPerPixel, int height, int width, int bytesPerRow, int padding);
 
 //Helpers
 int copyHeader(FILE* referenceBmp, FILE* outPutBmp, int bmpOffSetPosition);
+void reversePixelArray(PIXEL* firstPixel, PIXEL* lastPixel);
 short constructShort(BYTE* startByte);
 int constructInt(BYTE* startByte);
 
@@ -86,6 +88,20 @@ int main(int argc, char *argv[])
     );
 
     printf("Sucess to horizontal flip image\n");
+    }
+    else if(strcmp(argv[2], "rotate180Degress") == 0)
+    {
+        rotate180degrees(
+            bmpFile,
+            bmpOffSetPosition,
+            bitsPerPixel,
+            imageBmpHeight,
+            imageBmpWidth,
+            bytesPerRow,
+            padding
+    );
+
+    printf("Sucess to apply 180 degrees rotate");
     }
     else
     {
@@ -222,25 +238,10 @@ int horizontalFlip(FILE* bmpFile, int bmpOffSetPosition, int bitsPerPixel, int h
 
     PIXEL bmpRowArray[width];
 
-    int leftPixelPos;
-    int rightPixelPos;
-
     for(int y = 0; y < height; y++)
     {
         fread(bmpRowArray, bytesPerRow, 1, bmpFile);
-
-        for(int x = 0; x < width / 2; x++)
-        {
-            leftPixelPos = x;
-            rightPixelPos = width - 1 - x;
-
-            PIXEL tempPixel = bmpRowArray[leftPixelPos];
-
-            bmpRowArray[leftPixelPos] = bmpRowArray[rightPixelPos];
-
-            bmpRowArray[rightPixelPos] = tempPixel;
-        }
-
+        reversePixelArray(bmpRowArray, &bmpRowArray[width - 1]);
         fwrite(bmpRowArray, bytesPerRow, 1, bmpHorizontalFlip);
 
         for(int i = 0; i < padding; i++)
@@ -251,6 +252,81 @@ int horizontalFlip(FILE* bmpFile, int bmpOffSetPosition, int bitsPerPixel, int h
 
     fclose(bmpHorizontalFlip);
 
+    return 0;
+}
+
+int rotate180degrees(FILE* bmpFile, int bmpOffSetPosition, int bitsPerPixel, int height, int width, int bytesPerRow, int padding)
+{
+    FILE* bmpRotate180degrees = fopen("Rotate180degreesImage.bmp", "wb");
+
+    if(copyHeader(bmpFile, bmpRotate180degrees, bmpOffSetPosition) != 0)
+        return 1;
+
+    int atualRowIndex = 0;
+    int otherSideRowIndex = height - 1;
+    int atualRowPosition = 0;
+    int otherSideRowPosition = 0;
+
+    PIXEL atualRowArray[width];
+    PIXEL otherSideRowArray[width];
+
+    while (atualRowIndex < otherSideRowIndex)
+    {
+        atualRowPosition = ((padding + bytesPerRow) * atualRowIndex) + bmpOffSetPosition;
+        otherSideRowPosition = ((padding + bytesPerRow) * otherSideRowIndex) + bmpOffSetPosition;
+
+        fseek(bmpFile, atualRowPosition, SEEK_SET);
+        fread(atualRowArray, bytesPerRow, 1, bmpFile);
+
+        fseek(bmpFile, otherSideRowPosition, SEEK_SET);
+        fread(otherSideRowArray, bytesPerRow, 1, bmpFile);
+
+        reversePixelArray(atualRowArray, &atualRowArray[width - 1]);
+        reversePixelArray(otherSideRowArray, &otherSideRowArray[width - 1]);
+
+        fseek(bmpRotate180degrees, atualRowPosition, SEEK_SET);
+        fwrite(otherSideRowArray, bytesPerRow, 1, bmpRotate180degrees);
+        
+        for(int i = 0; i < padding; i++)
+        {
+            fputc(0, bmpRotate180degrees);
+        }
+
+        fseek(bmpRotate180degrees, otherSideRowPosition, SEEK_SET);
+        fwrite(atualRowArray, bytesPerRow, 1, bmpRotate180degrees);
+
+        for(int i = 0; i < padding; i++)
+        {
+            fputc(0, bmpRotate180degrees);
+        }
+
+        atualRowIndex++;
+        otherSideRowIndex--;
+    }
+
+    if((height % 2) != 0)
+    {
+        int middleRowPosition = ((padding + bytesPerRow) * atualRowIndex) + bmpOffSetPosition;
+
+        fseek(bmpFile, middleRowPosition, SEEK_SET);
+        fread(atualRowArray, bytesPerRow, 1, bmpFile);
+
+        reversePixelArray(atualRowArray, &atualRowArray[width - 1]);
+
+        fseek(bmpRotate180degrees, middleRowPosition, SEEK_SET);
+
+        fwrite(
+            atualRowArray,
+            bytesPerRow,
+            1,
+            bmpRotate180degrees
+        );
+
+        for(int i = 0; i < padding; i++)
+            fputc(0, bmpRotate180degrees);
+    }
+    
+    fclose(bmpRotate180degrees);
     return 0;
 }
 
@@ -280,6 +356,23 @@ int copyHeader(FILE* referenceBmp, FILE* outPutBmp, int bmpOffSetPosition)
     fwrite(allHeader, bmpOffSetPosition, 1, outPutBmp);
 
     return 0;
+}
+
+void reversePixelArray(PIXEL* firstPixel, PIXEL* lastPixel)
+{
+    PIXEL* atualPixel = firstPixel;
+    PIXEL* otherSidePixel = lastPixel;
+
+    while(atualPixel < otherSidePixel)
+    {
+        PIXEL temp = *atualPixel;
+
+        *atualPixel = *otherSidePixel;
+        *otherSidePixel = temp;
+
+        atualPixel++;
+        otherSidePixel--;
+    }
 }
 
 short constructShort(BYTE* startByte)
