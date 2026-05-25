@@ -10,20 +10,39 @@ typedef struct
     BYTE red;
 } PIXEL;
 
+typedef struct
+{
+    FILE* bmpFile;
+
+    int bmpFileSize;
+    int bmpOffSetPosition;
+
+    int imageBmpHeight;
+    int imageBmpWidth;
+
+    short bitsPerPixel;
+
+    int compression;
+    int bmpSizeImage;
+
+    int bytesPerRow;
+    int padding;
+
+} BMPFILE;
+
 #define FILEHEADERSIZE 14
 #define INFOHEADERSIZE 40
 
 //File Analyse
 int isBmp (BYTE firstByte, BYTE secondByte);
-int analyseFileHeader(FILE* bmpFile, int* bmpFileSize, int* bmpOffSetPosition);
-int analyseInfoHeader(FILE* bmpFile, int* bmpImageHeight, int* bmpImageWidth, short* bitsByPixel, int* compression, int* bmpImageSize);
-int isSupportedBmpFile(FILE* bmpFile, int* bmpFileSize, int* bmpOffSetPosition,
-    int* imageBmpHeight, int* imageBmpWidth, short* bitsPerPixel, int* compression, int* bmpSizeImage);
+int analyseFileHeader(BMPFILE* bmpFileObj);
+int analyseInfoHeader(BMPFILE* bmpFileObj);
+int isSupportedBmpFile(BMPFILE* bmpFileObj);
 
 //Filters
-int transformGrayScale(FILE* bmpFile ,int bmpOffSetPosition, int bitsPerPixel, int height, int width, int bytesPerRow, int padding);
-int horizontalFlip(FILE* bmpFile, int bmpOffSetPosition, int bitsPerPixel, int height, int width, int bytesPerRow, int padding);
-int rotate180degrees(FILE* bmpFile, int bmpOffSetPosition, int bitsPerPixel, int height, int width, int bytesPerRow, int padding);
+int transformGrayScale(BMPFILE* bmpFileObj);
+int horizontalFlip(BMPFILE* bmpFileObj);
+int rotate180degrees(BMPFILE* bmpFileObj);
 
 //Helpers
 int copyHeader(FILE* referenceBmp, FILE* outPutBmp, int bmpOffSetPosition);
@@ -33,90 +52,61 @@ int constructInt(BYTE* startByte);
 
 int main(int argc, char *argv[])
 {
+    BMPFILE bmpFileObj;
 
-    FILE *bmpFile;
-    int bmpFileSize;
-    int bmpOffSetPosition;
-    int imageBmpHeight, imageBmpWidth;
-    short bitsPerPixel;
-    int compression;
-    int bmpSizeImage;
-    int bytesPerRow;
-    int padding;
-
-    if (argc < 3)
+    if(argc < 3)
     {
         printf("The program structure is: <./program_name> <image.bmp> <filter>");
         return 1;
     }
 
-    bmpFile = fopen(argv[1], "rb");
+    bmpFileObj.bmpFile = fopen(argv[1], "rb");
 
-    if(bmpFile == NULL)
+    if(bmpFileObj.bmpFile == NULL)
         return 1;
 
-    if(isSupportedBmpFile(bmpFile, &bmpFileSize, &bmpOffSetPosition, &imageBmpHeight, &imageBmpWidth, &bitsPerPixel, &compression, &bmpSizeImage) != 0)
+    if(isSupportedBmpFile(&bmpFileObj) != 0)
         return 1;
 
-    bytesPerRow = imageBmpWidth * (bitsPerPixel / 8); 
-    padding = (4 - (bytesPerRow % 4)) % 4;
+    bmpFileObj.bytesPerRow =
+        bmpFileObj.imageBmpWidth * (bmpFileObj.bitsPerPixel / 8);
+
+    bmpFileObj.padding =
+        (4 - (bmpFileObj.bytesPerRow % 4)) % 4;
 
     if(strcmp(argv[2], "grayScale") == 0)
     {
-        transformGrayScale(
-            bmpFile,
-            bmpOffSetPosition,
-            bitsPerPixel,
-            imageBmpHeight,
-            imageBmpWidth,
-            bytesPerRow,
-            padding
-        );
-            
-            printf("Sucess to read and copy image\n");
+        transformGrayScale(&bmpFileObj);
+
+        printf("Sucess to read and copy image\n");
     }
     else if(strcmp(argv[2], "horizontalFlip") == 0)
     {
-        horizontalFlip(
-        bmpFile,
-        bmpOffSetPosition,
-        bitsPerPixel,
-        imageBmpHeight,
-        imageBmpWidth,
-        bytesPerRow,
-        padding
-    );
+        horizontalFlip(&bmpFileObj);
 
-    printf("Sucess to horizontal flip image\n");
+        printf("Sucess to horizontal flip image\n");
     }
-    else if(strcmp(argv[2], "rotate180Degress") == 0)
+    else if(strcmp(argv[2], "rotate180Degrees") == 0)
     {
-        rotate180degrees(
-            bmpFile,
-            bmpOffSetPosition,
-            bitsPerPixel,
-            imageBmpHeight,
-            imageBmpWidth,
-            bytesPerRow,
-            padding
-    );
+        rotate180degrees(&bmpFileObj);
 
-    printf("Sucess to apply 180 degrees rotate");
+        printf("Sucess to apply 180 degrees rotate");
     }
     else
     {
         printf("Filter not found\n");
     }
 
-    fclose(bmpFile);
+    fclose(bmpFileObj.bmpFile);
+
     return 0;
 }
 
-int analyseFileHeader(FILE* bmpFile, int* bmpFileSize, int* bmpOffSetPosition)
+int analyseFileHeader(BMPFILE* bmpFileObj)
 {
     BYTE fileHeader[FILEHEADERSIZE];
 
-    if(fread(fileHeader, FILEHEADERSIZE, 1, bmpFile) != 1)
+    if(fread(fileHeader, FILEHEADERSIZE, 1, bmpFileObj->bmpFile) != 1)
     {
         printf("The program could not read header\n");
         return 1;
@@ -128,65 +118,64 @@ int analyseFileHeader(FILE* bmpFile, int* bmpFileSize, int* bmpOffSetPosition)
         return 1;
     }
 
-    *bmpFileSize = constructInt(&fileHeader[2]);
-    *bmpOffSetPosition = constructInt(&fileHeader[10]);
+    bmpFileObj->bmpFileSize =
+        constructInt(&fileHeader[2]);
+
+    bmpFileObj->bmpOffSetPosition =
+        constructInt(&fileHeader[10]);
 
     return 0;
 }
 
-int analyseInfoHeader(FILE* bmpFile, int* bmpImageHeight, int* bmpImageWidth, short* bitsPerPixel, int* compression, int* bmpImageSize)
+int analyseInfoHeader(BMPFILE* bmpFileObj)
 {
     BYTE infoHeader[INFOHEADERSIZE];
-    
-    if(fread(infoHeader, INFOHEADERSIZE, 1, bmpFile) != 1)
+
+    if(fread(infoHeader, INFOHEADERSIZE, 1, bmpFileObj->bmpFile) != 1)
     {
         printf("The program could not read info header\n");
         return 1;
     }
 
-    //Fread passa a ler a partir do primeiro BYTE ainda não lido
-    //Após ler até o header[13] fread começa do [14]
-    //ImageWidth está em header[18] -> 18 - 14 = 4
-    //ImageHeight está em header[22] -> 22 - 14 = 8
-    *bmpImageWidth = constructInt(&infoHeader[4]);
-    *bmpImageHeight = constructInt(&infoHeader[8]);
-    
-    *bitsPerPixel = constructShort(&infoHeader[14]);
-    *compression = constructInt(&infoHeader[16]);
-    *bmpImageSize = constructInt(&infoHeader[20]);
-    
+    bmpFileObj->imageBmpWidth =
+        constructInt(&infoHeader[4]);
+
+    bmpFileObj->imageBmpHeight =
+        constructInt(&infoHeader[8]);
+
+    bmpFileObj->bitsPerPixel =
+        constructShort(&infoHeader[14]);
+
+    bmpFileObj->compression =
+        constructInt(&infoHeader[16]);
+
+    bmpFileObj->bmpSizeImage =
+        constructInt(&infoHeader[20]);
+
     return 0;
 }
 
-int isSupportedBmpFile(
-    FILE* bmpFile,
-    int* bmpFileSize,
-    int* bmpOffSetPosition,
-    int* imageBmpHeight,
-    int* imageBmpWidth,
-    short* bitsPerPixel,
-    int* compression,
-    int* bmpSizeImage)
+int isSupportedBmpFile(BMPFILE* bmpFileObj)
 {
-    if(analyseFileHeader(bmpFile, bmpFileSize, bmpOffSetPosition) != 0)
+    if(analyseFileHeader(bmpFileObj) != 0)
         return 1;
 
-    if(analyseInfoHeader(bmpFile, imageBmpHeight, imageBmpWidth, bitsPerPixel, compression, bmpSizeImage) != 0)
+    if(analyseInfoHeader(bmpFileObj) != 0)
         return 1;
 
-    if(*compression != 0)
+    if(bmpFileObj->compression != 0)
     {
         printf("Have not suport to compressed file\n");
         return 1;
     }
 
-    if(*bitsPerPixel != 24)
+    if(bmpFileObj->bitsPerPixel != 24)
     {
         printf("Images with less or more than three bytes per pixel are not supported\n");
         return 1;
     }
 
-    if(*bmpOffSetPosition < 54)
+    if(bmpFileObj->bmpOffSetPosition < 54)
     {
         printf("Image with not supported header type\n");
         return 1;
@@ -195,59 +184,107 @@ int isSupportedBmpFile(
     return 0;
 }
 
-int transformGrayScale(FILE* bmpFile ,int bmpOffSetPosition, int bitsPerPixel, int height, int width, int bytesPerRow, int padding)
+int transformGrayScale(BMPFILE* bmpFileObj)
 {
     FILE* bmpGrayScale = fopen("imagemGray.bmp", "wb");
 
-    if(copyHeader(bmpFile, bmpGrayScale, bmpOffSetPosition) != 0)
-        return 1;
-    
-    for (int line = 0; line < height; line++)
+    if(copyHeader(
+        bmpFileObj->bmpFile,
+        bmpGrayScale,
+        bmpFileObj->bmpOffSetPosition) != 0)
     {
-        PIXEL imageLineArray[width];
+        return 1;
+    }
 
-        fread(imageLineArray, bytesPerRow, 1, bmpFile);
+    for(int line = 0; line < bmpFileObj->imageBmpHeight; line++)
+    {
+        PIXEL imageLineArray[bmpFileObj->imageBmpWidth];
 
-        for(int i = 0; i < width; i++)
+        fread(
+            imageLineArray,
+            bmpFileObj->bytesPerRow,
+            1,
+            bmpFileObj->bmpFile
+        );
+
+        for(int i = 0; i < bmpFileObj->imageBmpWidth; i++)
         {
             PIXEL pixel = imageLineArray[i];
-            int gray = (pixel.red + pixel.green + pixel.blue) / 3;
-            
+
+            int gray =
+                (pixel.red + pixel.green + pixel.blue) / 3;
+
             imageLineArray[i].blue = gray;
             imageLineArray[i].green = gray;
             imageLineArray[i].red = gray;
         }
 
-        fwrite(imageLineArray, bytesPerRow, 1, bmpGrayScale);
+        fwrite(
+            imageLineArray,
+            bmpFileObj->bytesPerRow,
+            1,
+            bmpGrayScale
+        );
 
-        for(int i = 0; i < padding; i++)
+        for(int i = 0; i < bmpFileObj->padding; i++)
             fputc(0, bmpGrayScale);
 
-        fseek(bmpFile, padding, SEEK_CUR);
+        fseek(
+            bmpFileObj->bmpFile,
+            bmpFileObj->padding,
+            SEEK_CUR
+        );
     }
+
     fclose(bmpGrayScale);
+
     return 0;
 }
 
-int horizontalFlip(FILE* bmpFile, int bmpOffSetPosition, int bitsPerPixel, int height, int width, int bytesPerRow, int padding)
+int horizontalFlip(BMPFILE* bmpFileObj)
 {
-    FILE* bmpHorizontalFlip = fopen("HorizontalFlipImage.bmp", "wb");
+    FILE* bmpHorizontalFlip =
+        fopen("HorizontalFlipImage.bmp", "wb");
 
-    if(copyHeader(bmpFile, bmpHorizontalFlip, bmpOffSetPosition) != 0)
-        return 1;
-
-    PIXEL bmpRowArray[width];
-
-    for(int y = 0; y < height; y++)
+    if(copyHeader(
+        bmpFileObj->bmpFile,
+        bmpHorizontalFlip,
+        bmpFileObj->bmpOffSetPosition) != 0)
     {
-        fread(bmpRowArray, bytesPerRow, 1, bmpFile);
-        reversePixelArray(bmpRowArray, &bmpRowArray[width - 1]);
-        fwrite(bmpRowArray, bytesPerRow, 1, bmpHorizontalFlip);
+        return 1;
+    }
 
-        for(int i = 0; i < padding; i++)
+    PIXEL bmpRowArray[bmpFileObj->imageBmpWidth];
+
+    for(int y = 0; y < bmpFileObj->imageBmpHeight; y++)
+    {
+        fread(
+            bmpRowArray,
+            bmpFileObj->bytesPerRow,
+            1,
+            bmpFileObj->bmpFile
+        );
+
+        reversePixelArray(
+            bmpRowArray,
+            &bmpRowArray[bmpFileObj->imageBmpWidth - 1]
+        );
+
+        fwrite(
+            bmpRowArray,
+            bmpFileObj->bytesPerRow,
+            1,
+            bmpHorizontalFlip
+        );
+
+        for(int i = 0; i < bmpFileObj->padding; i++)
             fputc(0, bmpHorizontalFlip);
 
-        fseek(bmpFile, padding, SEEK_CUR);
+        fseek(
+            bmpFileObj->bmpFile,
+            bmpFileObj->padding,
+            SEEK_CUR
+        );
     }
 
     fclose(bmpHorizontalFlip);
@@ -255,47 +292,113 @@ int horizontalFlip(FILE* bmpFile, int bmpOffSetPosition, int bitsPerPixel, int h
     return 0;
 }
 
-int rotate180degrees(FILE* bmpFile, int bmpOffSetPosition, int bitsPerPixel, int height, int width, int bytesPerRow, int padding)
+int rotate180degrees(BMPFILE* bmpFileObj)
 {
-    FILE* bmpRotate180degrees = fopen("Rotate180degreesImage.bmp", "wb");
+    FILE* bmpRotate180degrees =
+        fopen("Rotate180degreesImage.bmp", "wb");
 
-    if(copyHeader(bmpFile, bmpRotate180degrees, bmpOffSetPosition) != 0)
+    if(copyHeader(
+        bmpFileObj->bmpFile,
+        bmpRotate180degrees,
+        bmpFileObj->bmpOffSetPosition) != 0)
+    {
         return 1;
+    }
 
     int atualRowIndex = 0;
-    int otherSideRowIndex = height - 1;
+
+    int otherSideRowIndex =
+        bmpFileObj->imageBmpHeight - 1;
+
     int atualRowPosition = 0;
     int otherSideRowPosition = 0;
 
-    PIXEL atualRowArray[width];
-    PIXEL otherSideRowArray[width];
+    PIXEL atualRowArray[bmpFileObj->imageBmpWidth];
 
-    while (atualRowIndex < otherSideRowIndex)
+    PIXEL otherSideRowArray[bmpFileObj->imageBmpWidth];
+
+    while(atualRowIndex < otherSideRowIndex)
     {
-        atualRowPosition = ((padding + bytesPerRow) * atualRowIndex) + bmpOffSetPosition;
-        otherSideRowPosition = ((padding + bytesPerRow) * otherSideRowIndex) + bmpOffSetPosition;
+        atualRowPosition =
+            ((bmpFileObj->padding +
+            bmpFileObj->bytesPerRow)
+            * atualRowIndex)
+            + bmpFileObj->bmpOffSetPosition;
 
-        fseek(bmpFile, atualRowPosition, SEEK_SET);
-        fread(atualRowArray, bytesPerRow, 1, bmpFile);
+        otherSideRowPosition =
+            ((bmpFileObj->padding +
+            bmpFileObj->bytesPerRow)
+            * otherSideRowIndex)
+            + bmpFileObj->bmpOffSetPosition;
 
-        fseek(bmpFile, otherSideRowPosition, SEEK_SET);
-        fread(otherSideRowArray, bytesPerRow, 1, bmpFile);
+        fseek(
+            bmpFileObj->bmpFile,
+            atualRowPosition,
+            SEEK_SET
+        );
 
-        reversePixelArray(atualRowArray, &atualRowArray[width - 1]);
-        reversePixelArray(otherSideRowArray, &otherSideRowArray[width - 1]);
+        fread(
+            atualRowArray,
+            bmpFileObj->bytesPerRow,
+            1,
+            bmpFileObj->bmpFile
+        );
 
-        fseek(bmpRotate180degrees, atualRowPosition, SEEK_SET);
-        fwrite(otherSideRowArray, bytesPerRow, 1, bmpRotate180degrees);
-        
-        for(int i = 0; i < padding; i++)
+        fseek(
+            bmpFileObj->bmpFile,
+            otherSideRowPosition,
+            SEEK_SET
+        );
+
+        fread(
+            otherSideRowArray,
+            bmpFileObj->bytesPerRow,
+            1,
+            bmpFileObj->bmpFile
+        );
+
+        reversePixelArray(
+            atualRowArray,
+            &atualRowArray[bmpFileObj->imageBmpWidth - 1]
+        );
+
+        reversePixelArray(
+            otherSideRowArray,
+            &otherSideRowArray[bmpFileObj->imageBmpWidth - 1]
+        );
+
+        fseek(
+            bmpRotate180degrees,
+            atualRowPosition,
+            SEEK_SET
+        );
+
+        fwrite(
+            otherSideRowArray,
+            bmpFileObj->bytesPerRow,
+            1,
+            bmpRotate180degrees
+        );
+
+        for(int i = 0; i < bmpFileObj->padding; i++)
         {
             fputc(0, bmpRotate180degrees);
         }
 
-        fseek(bmpRotate180degrees, otherSideRowPosition, SEEK_SET);
-        fwrite(atualRowArray, bytesPerRow, 1, bmpRotate180degrees);
+        fseek(
+            bmpRotate180degrees,
+            otherSideRowPosition,
+            SEEK_SET
+        );
 
-        for(int i = 0; i < padding; i++)
+        fwrite(
+            atualRowArray,
+            bmpFileObj->bytesPerRow,
+            1,
+            bmpRotate180degrees
+        );
+
+        for(int i = 0; i < bmpFileObj->padding; i++)
         {
             fputc(0, bmpRotate180degrees);
         }
@@ -304,29 +407,53 @@ int rotate180degrees(FILE* bmpFile, int bmpOffSetPosition, int bitsPerPixel, int
         otherSideRowIndex--;
     }
 
-    if((height % 2) != 0)
+    if((bmpFileObj->imageBmpHeight % 2) != 0)
     {
-        int middleRowPosition = ((padding + bytesPerRow) * atualRowIndex) + bmpOffSetPosition;
+        int middleRowPosition =
+            ((bmpFileObj->padding +
+            bmpFileObj->bytesPerRow)
+            * atualRowIndex)
+            + bmpFileObj->bmpOffSetPosition;
 
-        fseek(bmpFile, middleRowPosition, SEEK_SET);
-        fread(atualRowArray, bytesPerRow, 1, bmpFile);
+        fseek(
+            bmpFileObj->bmpFile,
+            middleRowPosition,
+            SEEK_SET
+        );
 
-        reversePixelArray(atualRowArray, &atualRowArray[width - 1]);
+        fread(
+            atualRowArray,
+            bmpFileObj->bytesPerRow,
+            1,
+            bmpFileObj->bmpFile
+        );
 
-        fseek(bmpRotate180degrees, middleRowPosition, SEEK_SET);
+        reversePixelArray(
+            atualRowArray,
+            &atualRowArray[bmpFileObj->imageBmpWidth - 1]
+        );
+
+        fseek(
+            bmpRotate180degrees,
+            middleRowPosition,
+            SEEK_SET
+        );
 
         fwrite(
             atualRowArray,
-            bytesPerRow,
+            bmpFileObj->bytesPerRow,
             1,
             bmpRotate180degrees
         );
 
-        for(int i = 0; i < padding; i++)
+        for(int i = 0; i < bmpFileObj->padding; i++)
+        {
             fputc(0, bmpRotate180degrees);
+        }
     }
-    
+
     fclose(bmpRotate180degrees);
+
     return 0;
 }
 
