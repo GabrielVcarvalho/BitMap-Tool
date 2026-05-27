@@ -43,8 +43,10 @@ int isSupportedBmpFile(BMPFILE* bmpFileObj);
 int transformGrayScale(BMPFILE* bmpFileObj);
 int horizontalFlip(BMPFILE* bmpFileObj);
 int rotate180degrees(BMPFILE* bmpFileObj);
+int rotate90DegreesClockWise(BMPFILE* bmpFileObj);
 
 //Helpers
+void storeIntInByteArray(BYTE* startByte, int value);
 int copyHeader(FILE* referenceBmp, FILE* outPutBmp, int bmpOffSetPosition);
 void reversePixelArray(PIXEL* firstPixel, PIXEL* lastPixel);
 short constructShort(BYTE* startByte);
@@ -91,6 +93,12 @@ int main(int argc, char *argv[])
         rotate180degrees(&bmpFileObj);
 
         printf("Sucess to apply 180 degrees rotate");
+    }
+    else if(strcmp(argv[2], "rotate90DegreesClockWise") == 0)
+    {
+        rotate90DegreesClockWise(&bmpFileObj);
+
+        printf("Sucess to apply 90 degrees clock wise rotate");
     }
     else
     {
@@ -455,6 +463,149 @@ int rotate180degrees(BMPFILE* bmpFileObj)
     fclose(bmpRotate180degrees);
 
     return 0;
+}
+
+int rotate90DegreesClockWise(BMPFILE* bmpFileObj)
+{
+    FILE* bmpRotate90 =
+        fopen("Rotate90ClockWiseImage.bmp", "wb");
+
+    if(bmpRotate90 == NULL)
+        return 1;
+
+    if(copyHeader(
+        bmpFileObj->bmpFile,
+        bmpRotate90,
+        bmpFileObj->bmpOffSetPosition) != 0)
+    {
+        return 1;
+    }
+
+    int newWidth =
+        bmpFileObj->imageBmpHeight;
+
+    int newHeight =
+        bmpFileObj->imageBmpWidth;
+
+    int newBytesPerRow =
+        newWidth * (bmpFileObj->bitsPerPixel / 8);
+
+    int newPadding =
+        (4 - (newBytesPerRow % 4)) % 4;
+
+    /*
+        Header width position  -> byte 18
+        Header height position -> byte 22
+    */
+
+    fseek(bmpRotate90, 18, SEEK_SET);
+
+    BYTE widthAndHeightBytes[8];
+
+    storeIntInByteArray(
+        widthAndHeightBytes,
+        newWidth
+    );
+
+    storeIntInByteArray(
+        &widthAndHeightBytes[4],
+        newHeight
+    );
+
+    fwrite(widthAndHeightBytes, 8, 1, bmpRotate90);
+
+    PIXEL rowOriginalImageArray[bmpFileObj->imageBmpWidth];
+
+    int originalRowPosition = 0;
+    int destinationPixelPosition = 0;
+
+    for(int y = 0; y < bmpFileObj->imageBmpHeight; y++)
+    {
+        originalRowPosition =
+            ((bmpFileObj->bytesPerRow +
+            bmpFileObj->padding) * y)
+            + bmpFileObj->bmpOffSetPosition;
+
+        fseek(
+            bmpFileObj->bmpFile,
+            originalRowPosition,
+            SEEK_SET
+        );
+
+        fread(
+            rowOriginalImageArray,
+            bmpFileObj->bytesPerRow,
+            1,
+            bmpFileObj->bmpFile
+        );
+
+        for(int x = 0; x < bmpFileObj->imageBmpWidth; x++)
+        {
+            destinationPixelPosition =
+                bmpFileObj->bmpOffSetPosition +
+
+                ((x * (newBytesPerRow + newPadding))) +
+
+                ((newWidth - 1 - y) * sizeof(PIXEL));
+
+            fseek(
+                bmpRotate90,
+                destinationPixelPosition,
+                SEEK_SET
+            );
+
+            fwrite(
+                &rowOriginalImageArray[x],
+                sizeof(PIXEL),
+                1,
+                bmpRotate90
+            );
+        }
+    }
+
+    BYTE paddingBytes[3] = {0, 0, 0};
+
+    for(int row = 0; row < newHeight; row++)
+    {
+        int paddingPosition =
+            bmpFileObj->bmpOffSetPosition +
+
+            (row * (newBytesPerRow + newPadding)) +
+
+            newBytesPerRow;
+
+        fseek(
+            bmpRotate90,
+            paddingPosition,
+            SEEK_SET
+        );
+
+        fwrite(
+            paddingBytes,
+            newPadding,
+            1,
+            bmpRotate90
+        );
+    }
+
+    fclose(bmpRotate90);
+
+    return 0;
+
+}
+
+void storeIntInByteArray(BYTE* startByte, int value)
+{
+    startByte[0] = value & 0xFF;
+
+    startByte[1] =
+        (value >> 8) & 0xFF;
+
+    startByte[2] =
+        (value >> 16) & 0xFF;
+
+    startByte[3] =
+        (value >> 24) & 0xFF;
 }
 
 int constructInt(BYTE* startByte)
